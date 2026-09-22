@@ -114,8 +114,8 @@ Two tabs: **Ventilation** and **Alarm Limits**.
 - Mode selector: **VC** | **PC**.
 - Grid of large parameter tiles (tap → adjuster dialog with − / + and Confirm/Cancel).
 - The **VT tile is pre-filled from IBW** (7 mL/kg, rounded to 10 mL adult / 5 mL pediatric).
-- A tile turns **yellow with a note** when a value is outside typical/lung-protective ranges
-  (e.g. VT outside 6–8 mL/kg IBW). This is an *advisory*, not an alarm.
+- A tile gets an **orange border and a note** when a value is outside typical/lung-protective ranges
+  (e.g. VT outside 6–8 mL/kg IBW). This is an *advisory*, not an alarm (orange, because red/yellow/cyan are reserved for alarms).
 - Computed read-only info: **I:E ratio**, and in VC the **inspiratory flow** (VT / Ti).
 
 **Parameter ranges and defaults**
@@ -310,7 +310,7 @@ apt (Section 9).
 | Term | Meaning in this HMI |
 |---|---|
 | **Active** | The alarm condition is currently true (after its delay). |
-| **Latched** | A **high-priority** alarm whose condition has ended but is kept visible (banner shows "resolved", flashing stops, text stays) until **Alarm Reset**. |
+| **Latched** | A **high-priority** alarm whose condition has ended but is kept visible (banner shows "resolved", flashing stops, text stays) until **Alarm Reset**. A resolved alarm no longer sounds; the buzzer follows only alarms whose condition is still true. |
 | **Audio Paused** | Sound stopped for **120 s** (ISO 80601-2-12 maximum). Shown with a crossed-bell icon and countdown. Visual signals continue. A **new** alarm condition ends the pause immediately. Pressing again during a pause restarts the 120 s. |
 | **Alarm Reset** | Clears latched (resolved) alarms and removes them from the banner. It does **not** clear alarms whose condition is still true. |
 | Medium / low alarms | **Non-latching**: they disappear by themselves when the condition ends. |
@@ -413,7 +413,7 @@ Lines with a wrong checksum are ignored and counted.
 |---|---|---|---|
 | `D` data sample | t_ms, pressure_cmH2O, flow_Lpm, volume_mL, phase (`I`/`E`) | 50 Hz | `$D,12345,18.2,32.5,410,I*..` |
 | `M` monitor status | fio2_pct, battery_pct, power (`AC`/`BAT`), o2_supply (`OK`/`FAIL`) | 1 Hz | `$M,40.5,87,AC,OK*..` |
-| `R` test result | test (`SELF`/`LEAK`/`COMP`/`CAL`), `PASS`/`FAIL`, value, unit | on completion | `$R,LEAK,PASS,45,mL/min*..` |
+| `R` test result | test (`SELF`/`LEAK`/`COMP`/`CAL`/`ALARM`), `PASS`/`FAIL`, detail text (no commas) | on completion | `$R,LEAK,PASS,Leak 45 mL/min (limit < 200)*..` |
 | `F` fault | code, `1` active / `0` cleared | on change | `$F,FLOW_SENSOR,1*..` |
 | `K` acknowledge | command type, `OK`/`ERR`, reason | per command | `$K,S,OK,*..` |
 | `H` heartbeat | sequence number | 5 Hz | `$H,42*..` |
@@ -467,12 +467,12 @@ Opened by **long-press (2 s) on the logo** or **F12**. Toggles:
 | Fault | Effect in the simulation | Alarms you should see |
 |---|---|---|
 | Disconnection | Pressure stays near 0, Vte ≈ 0 | LOW PRESSURE, LOW VTE, LOW MVE |
-| Occlusion (expiratory) | Air cannot leave: pressure stays high | HIGH PRESSURE, SUSTAINED PRESSURE |
-| Leak (30 %) | Vte = 70 % of delivered volume, PEEP drops | LOW VTE, LOW PEEP |
-| Stiff lungs (C ÷ 3) | VC: PIP rises; PC: Vte falls | HIGH PRESSURE (VC) or LOW VTE (PC) |
+| Occlusion (expiratory) | Air cannot leave: pressure stays high | VC: HIGH PRESSURE, SUSTAINED PRESSURE, LOW VTE · PC: LOW VTE, LOW MVE |
+| Large leak (50 %) | Vte = 50 % of delivered volume, PEEP cannot be held | LOW VTE, LOW PEEP |
+| Stiff lungs (C ÷ 4) | VC: PIP rises; PC: Vte falls | HIGH PRESSURE (VC) or LOW VTE (PC) |
 | Patient effort (fast breathing) | Triggered breaths at 40 bpm | HIGH RR, HIGH MVE |
 | O2 supply loss | O2 supply = FAIL, FiO2 drifts to 21 % | O2 SUPPLY, then LOW FIO2 |
-| Battery mode | Power = BAT, battery drains 1 % every 2 s | ON BATTERY → BATTERY LOW → BATTERY DEPLETED |
+| Battery mode | Power = BAT, battery jumps to 25 % and drains 1 % every 2 s | ON BATTERY → BATTERY LOW → BATTERY DEPLETED |
 | MCU link loss | Simulator stops sending heartbeats/data | MCU COMMUNICATION LOST |
 | Force pre-use test failure | Chosen test returns FAIL | (Pre-use check screen shows failure) |
 
