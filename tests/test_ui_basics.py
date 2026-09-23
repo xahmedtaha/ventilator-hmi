@@ -5,6 +5,7 @@ from hmi.model.settings import param_spec
 from hmi.ui.dialogs.confirm import ConfirmDialog
 from hmi.ui.dialogs.keyboard import KeyboardDialog
 from hmi.ui.dialogs.value_adjust import ValueAdjustDialog
+from hmi.ui.theme import apply_theme
 from hmi.ui.widgets.inline_adjuster import InlineAdjuster
 from hmi.ui.widgets.numeric_readout import NumericReadout
 from hmi.ui.widgets.param_tile import ParamTile
@@ -78,3 +79,10 @@ def test_keyboard_dialog_typing(qapp):
 def test_confirm_dialog_buttons(qapp):
     dlg = ConfirmDialog(None, "Title", "Text", confirm_text="Start", cancel_text=None)
     assert dlg.confirm_button.text() == "Start" and dlg.cancel_button is None
+
+
+def test_primary_buttons_meet_minimum_tap_target(qapp):
+    apply_theme(qapp)
+    dlg = ConfirmDialog(None, "Title", "Text")
+    dlg.confirm_button.ensurePolished()
+    assert dlg.confirm_button.sizeHint().height() >= 56

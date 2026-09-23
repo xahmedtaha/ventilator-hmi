@@ -34,9 +34,9 @@ QPushButton {{ background: {SURFACE_2}; border: 1px solid {BORDER}; border-radiu
               padding: 6px 14px; min-height: 48px; font-size: 18px; color: {TEXT}; }}
 QPushButton:pressed {{ background: {BORDER}; }}
 QPushButton:disabled {{ color: #55606c; background: #11161d; border-color: #1a222c; }}
-QPushButton[role="primary"] {{ background: {PRIMARY}; border-color: {PRIMARY}; font-weight: 600; }}
-QPushButton[role="go"] {{ background: {GO}; border-color: {GO}; font-weight: 700; }}
-QPushButton[role="danger"] {{ background: {DANGER}; border-color: #b33a48; font-weight: 700; }}
+QPushButton[role="primary"] {{ background: {PRIMARY}; border-color: {PRIMARY}; font-weight: 600; min-height: 56px; }}
+QPushButton[role="go"] {{ background: {GO}; border-color: {GO}; font-weight: 700; min-height: 56px; }}
+QPushButton[role="danger"] {{ background: {DANGER}; border-color: #b33a48; font-weight: 700; min-height: 56px; }}
 QPushButton[role="toggle"]:checked {{ background: {PRIMARY}; border-color: {PRIMARY}; font-weight: 600; }}
 QPushButton[role="primary"]:disabled, QPushButton[role="go"]:disabled {{
     background: #11161d; border-color: #1a222c; color: #55606c; }}
