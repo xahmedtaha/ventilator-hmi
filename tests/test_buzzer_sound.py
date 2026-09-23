@@ -1,4 +1,6 @@
+import glob
 import io
+import tempfile
 import wave
 
 import pytest
@@ -30,3 +32,13 @@ def test_state_text_follows_priority_and_pause(qapp):
     b.update(Priority.NONE, False)
     assert b.state_text == "silent"
     b.shutdown()
+
+
+def test_disabled_buzzer_creates_no_temp_directory(qapp):
+    pattern = tempfile.gettempdir() + "/vent-hmi-buzzer-*"
+    before = len(glob.glob(pattern))
+    b = BuzzerSound(enabled=False)
+    after = len(glob.glob(pattern))
+    assert after == before
+    b.shutdown()
+    assert len(glob.glob(pattern)) == before

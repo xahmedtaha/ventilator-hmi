@@ -98,18 +98,24 @@ class _Player:
             self._winsound.PlaySound(None, 0)
         elif self._proc is not None and self._proc.poll() is None:
             self._proc.terminate()
+            try:
+                self._proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
         self._proc = None
 
 
 class BuzzerSound(QtCore.QObject):
     def __init__(self, parent: QtCore.QObject | None = None, enabled: bool = True):
         super().__init__(parent)
-        self._dir = Path(tempfile.mkdtemp(prefix="vent-hmi-buzzer-"))
+        self._dir: Path | None = None
         self._files: dict[Priority, Path] = {}
-        for priority in BURSTS:
-            path = self._dir / f"{priority.name.lower()}.wav"
-            path.write_bytes(_rendered(priority))
-            self._files[priority] = path
+        if enabled:
+            self._dir = Path(tempfile.mkdtemp(prefix="vent-hmi-buzzer-"))
+            for priority in BURSTS:
+                path = self._dir / f"{priority.name.lower()}.wav"
+                path.write_bytes(_rendered(priority))
+                self._files[priority] = path
         self._player = _Player() if enabled else None
         self._priority = Priority.NONE
         self._paused = False
@@ -150,7 +156,8 @@ class BuzzerSound(QtCore.QObject):
     def shutdown(self) -> None:
         self._timer.stop()
         self._stop()
-        shutil.rmtree(self._dir, ignore_errors=True)
+        if self._dir is not None:
+            shutil.rmtree(self._dir, ignore_errors=True)
 
     def _play_current(self) -> None:
         if self._player and self._priority in self._files:
