@@ -1,7 +1,7 @@
 import pytest
 
 from hmi.core.alarms.definitions import ALARMS, Priority
-from hmi.core.alarms.engine import AlarmEngine
+from hmi.core.alarms.engine import AlarmEngine, AlarmEvent
 from hmi.core.breath_analyzer import BreathResult
 from hmi.device.messages import MonitorStatus, Sample
 from hmi.model.alarm_limits import AlarmLimits
@@ -135,6 +135,15 @@ def test_standby_clears_physiological_but_keeps_technical():
     e.set_condition("LINK_LOST", True, 1)
     e.set_ventilating(False, 2)
     assert ids(e) == ["LINK_LOST"]
+
+
+def test_standby_logs_alarm_off_for_active_physiological_alarms():
+    e = make_engine()
+    e.on_sample(sample(45.0), 1)  # HIGH_PRESSURE, still active (not resolved)
+    e.drain_events()
+    e.set_ventilating(False, 2)
+    events = [ev for ev in e.drain_events() if ev.kind == "ALARM_OFF"]
+    assert events == [AlarmEvent("ALARM_OFF", "HIGH_PRESSURE", "HIGH", "45.0 > 40 cmH2O")]
 
 
 def test_apnea_after_apnea_time():

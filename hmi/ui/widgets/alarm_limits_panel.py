@@ -4,9 +4,9 @@ Used on the Settings screen (Alarm limits tab) and in the Alarms dialog (Limits 
 """
 from __future__ import annotations
 
-from hmi.model.alarm_limits import LIMIT_KEYS, AlarmLimits, fio2_limits, limit_spec, peep_limits
+from hmi.model.alarm_limits import AlarmLimits, fio2_limits, limit_spec, peep_limits, validate_limits
 from hmi.model.patient import PatientProfile
-from hmi.model.settings import VentSettings
+from hmi.model.settings import VentSettings, validate_settings
 from hmi.qt import QtWidgets, Signal
 from hmi.ui.dialogs.confirm import ConfirmDialog
 from hmi.ui.setting_edit import edit_limit
@@ -18,6 +18,7 @@ COLUMNS = (("ppeak_high", "ppeak_low"), ("vte_high", "vte_low"), ("mve_high", "m
 
 class AlarmLimitsPanel(QtWidgets.QWidget):
     limit_changed = Signal(str, float, float)
+    limits_replaced = Signal(object, object)  # (old: AlarmLimits, new: AlarmLimits) -- one change, e.g. Restore defaults
 
     def __init__(self):
         super().__init__()
@@ -72,15 +73,17 @@ class AlarmLimitsPanel(QtWidgets.QWidget):
         defaults = AlarmLimits.defaults_for(self._patient)
         if defaults == self._limits:
             return
+        errors = validate_limits(defaults) + validate_settings(self._settings, self._patient.category, defaults.ppeak_high)
+        if errors:
+            ConfirmDialog.inform(self, "Cannot restore defaults", errors[0])
+            return
         if not ConfirmDialog.ask(self, "Restore defaults",
                                  "Reset every alarm limit to the default for this patient?", confirm_text="Restore"):
             return
         old = self._limits
         self._limits = defaults
         self._refresh()
-        for key in LIMIT_KEYS:
-            if old.get(key) != defaults.get(key):
-                self.limit_changed.emit(key, old.get(key), defaults.get(key))
+        self.limits_replaced.emit(old, defaults)
 
     def _refresh(self) -> None:
         for key, tile in self.tiles.items():

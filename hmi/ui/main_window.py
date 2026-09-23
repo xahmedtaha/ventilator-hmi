@@ -15,7 +15,7 @@ from hmi.core.flow import ScreenFlow, Step
 from hmi.device.base import DeviceLink
 from hmi.device.messages import MonitorStatus, Sample
 from hmi.device.simulator import SimulatedDevice
-from hmi.model.alarm_limits import AlarmLimits, validate_limits
+from hmi.model.alarm_limits import LIMIT_KEYS, AlarmLimits, validate_limits
 from hmi.model.patient import PatientProfile
 from hmi.model.settings import MODE_PARAMS, VentSettings, param_spec, switch_mode, validate_settings
 from hmi.qt import QShortcut, QtCore, QtGui, QtWidgets
@@ -48,6 +48,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.last_breath: BreathResult | None = None
         self._fault_codes: set[str] = set()
         self._buzzer_state: tuple[int, bool] | None = None
+        self._buzzer_sent_at: float | None = None
         self._demo_panel: DemoPanel | None = None
 
         self.top_bar = TopBar()
@@ -119,14 +120,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_sample(self, s: Sample) -> None:
         now = self.clock()
         self.engine.on_sample(s, now)
-        if self._ventilating():
-            self.monitoring_screen.add_sample(s)
+        if not self._ventilating():
+            return  # don't feed the breath analyzer in Standby: unbounded memory over time
+        self.monitoring_screen.add_sample(s)
         result = self.analyzer.add(s)
         if result is not None:
             self.last_breath = result
             self.engine.on_breath(result, now)
-            if self._ventilating():
-                self.monitoring_screen.show_breath(result)
+            self.monitoring_screen.show_breath(result)
 
     def _on_status(self, m: MonitorStatus) -> None:
         self.engine.on_status(m, self.clock())
@@ -145,6 +146,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_link(self, ok: bool) -> None:
         self.engine.set_condition("LINK_LOST", not ok, self.clock())
         self.log.add("MCU_LINK", ok=ok)
+        if ok:
+            # The MCU (real or simulated) silences its own buzzer on link loss and ignores
+            # set_buzzer while lost, and a rebooted MCU starts silent: force a resend.
+            self._buzzer_state = None
+            self.analyzer.reset()  # don't report a breath that spans the link gap
 
     def update_alarms(self) -> None:
         """Every 200 ms: advance the alarm engine, log events, refresh the banner and the buzzer."""
@@ -158,8 +164,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.top_bar.set_audio_paused(self.engine.audio_pause_remaining(now) if paused else None)
         self.monitoring_screen.show_alarm_colors(self.engine.readout_priorities())
         buzzer = (int(self.engine.audible_priority()), paused)
-        if buzzer != self._buzzer_state:
+        stale = self._buzzer_sent_at is None or now - self._buzzer_sent_at >= 1.0
+        if buzzer != self._buzzer_state or stale:
             self._buzzer_state = buzzer
+            self._buzzer_sent_at = now
             self.device.set_buzzer(*buzzer)
 
     # ----- navigation ----------------------------------------------------------------------------
@@ -197,6 +205,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._set_patient(self.patient_screen.profile())
         self.flow.quick_start()
+        self.precheck_screen.reset()
         self._mark_precheck_skipped()
         self._show_step()
 
@@ -286,14 +295,47 @@ class MainWindow(QtWidgets.QMainWindow):
         self._apply(new, self.limits)
 
     def open_alarms(self) -> None:
-        dialog = AlarmsDialog(self, self.engine, self.log, self.patient, self.settings, self.limits, self.clock)
-        dialog.limit_changed.connect(self._on_dialog_limit_changed)
-        dialog.reset_requested.connect(self._alarm_reset)
+        dialog = self._make_alarms_dialog()
         dialog.exec()
+
+    def _make_alarms_dialog(self) -> AlarmsDialog:
+        """Build the Alarms dialog. On the Settings screen (before Start), limit changes must go
+        back into the (possibly unsaved-edited) Settings screen, not through _apply/the device:
+        _apply() would reload the Settings screen from MainWindow's own context and discard any
+        edit the operator has not yet started ventilation with, and would validate against stale
+        settings. While ventilating, the existing _apply()-based flow is used."""
+        if self.flow.step is Step.SETTINGS:
+            settings, limits = self.settings_screen.settings(), self.settings_screen.limits()
+            dialog = AlarmsDialog(self, self.engine, self.log, self.patient, settings, limits, self.clock)
+            dialog.limit_changed.connect(self._on_settings_screen_limit_changed)
+            dialog.limits_replaced.connect(self._on_settings_screen_limits_replaced)
+        else:
+            dialog = AlarmsDialog(self, self.engine, self.log, self.patient, self.settings, self.limits, self.clock)
+            dialog.limit_changed.connect(self._on_dialog_limit_changed)
+            dialog.limits_replaced.connect(self._on_dialog_limits_replaced)
+        dialog.reset_requested.connect(self._alarm_reset)
+        return dialog
 
     def _on_dialog_limit_changed(self, key: str, old: float, new: float) -> None:
         self.log.add("ALARM_LIMIT", key=key, old=old, new=new)
         self._apply(self.settings, self.limits.with_value(key, new))
+
+    def _on_dialog_limits_replaced(self, old: AlarmLimits, new: AlarmLimits) -> None:
+        self._log_limit_changes(old, new)
+        self._apply(self.settings, new)
+
+    def _on_settings_screen_limit_changed(self, key: str, old: float, new: float) -> None:
+        self.log.add("ALARM_LIMIT", key=key, old=old, new=new)
+        self.settings_screen.set_limits(self.settings_screen.limits().with_value(key, new))
+
+    def _on_settings_screen_limits_replaced(self, old: AlarmLimits, new: AlarmLimits) -> None:
+        self._log_limit_changes(old, new)
+        self.settings_screen.set_limits(new)
+
+    def _log_limit_changes(self, old: AlarmLimits, new: AlarmLimits) -> None:
+        for key in LIMIT_KEYS:
+            if old.get(key) != new.get(key):
+                self.log.add("ALARM_LIMIT", key=key, old=old.get(key), new=new.get(key))
 
     def _audio_pause(self) -> None:
         self.engine.audio_pause(self.clock())
@@ -309,6 +351,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.device.standby()
         self.engine.set_ventilating(False, self.clock())
+        self.analyzer.reset()
         self.flow.standby()
         self.log.add("STANDBY")
         self._show_step()

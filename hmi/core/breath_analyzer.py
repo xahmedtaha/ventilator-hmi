@@ -17,6 +17,8 @@ from hmi.model.settings import ie_text
 LPM_TO_MLS = 1000.0 / 60.0
 PEEP_WINDOW_MS = 100
 AVERAGE_BREATHS = 4
+MAX_BREATH_SAMPLES = 3000  # 60 s at 50 Hz: a breath that never returns to I (stuck phase /
+# fault) is discarded rather than growing the sample buffer without bound.
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,9 @@ class BreathAnalyzer:
             self._started = True
         if self._started:
             self._samples.append(sample)
+            if len(self._samples) > MAX_BREATH_SAMPLES:
+                self._samples = []
+                self._started = False
         self._prev_phase = sample.phase
         return result
 

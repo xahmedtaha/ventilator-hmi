@@ -1,7 +1,8 @@
 import pytest
 
-from hmi.core.breath_analyzer import BreathAnalyzer
+from hmi.core.breath_analyzer import MAX_BREATH_SAMPLES, BreathAnalyzer
 from hmi.device.lung_model import LungSimulator
+from hmi.device.messages import Sample
 from hmi.model.settings import VentSettings
 
 
@@ -38,3 +39,20 @@ def test_measurements_match_the_lung_model():
 
 def test_standby_samples_give_no_breaths():
     assert run(10.0, start=False) == []
+
+
+def test_runaway_breath_is_capped_and_discarded():
+    """A breath that never returns to I (stuck phase / fault) must not grow forever."""
+    analyzer = BreathAnalyzer()
+    analyzer.add(Sample(0, 10.0, 30.0, 0.0, "I"))
+    for i in range(1, MAX_BREATH_SAMPLES + 10):
+        result = analyzer.add(Sample(i * 20, 5.0, -10.0, 0.0, "E"))
+        assert result is None
+    assert analyzer._samples == []
+    assert analyzer._started is False
+    # The next breath starts and finishes normally.
+    analyzer.add(Sample(1_000_000, 10.0, 30.0, 0.0, "I"))
+    for i in range(1, 51):
+        analyzer.add(Sample(1_000_000 + i * 20, 5.0, -10.0, 0.0, "E"))
+    result = analyzer.add(Sample(2_000_000, 10.0, 30.0, 0.0, "I"))
+    assert result is not None

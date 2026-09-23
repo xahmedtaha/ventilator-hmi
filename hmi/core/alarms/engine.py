@@ -90,7 +90,11 @@ class AlarmEngine:
             return
         self._last_breath = None
         for alarm_id in [a for a, s in self._states.items() if s.definition.physiological]:
-            del self._states[alarm_id]
+            state = self._states.pop(alarm_id)
+            if state.active:
+                # Resolved/latched alarms already logged their ALARM_OFF via _resolve(); an
+                # alarm still active when ventilation stops needs one too (spec 6.5).
+                self._events.append(AlarmEvent("ALARM_OFF", alarm_id, state.priority.name, state.detail))
         for alarm_id in [a for a in self._pending if ALARMS[a].physiological]:
             del self._pending[alarm_id]
 

@@ -145,6 +145,7 @@ class PrecheckScreen(QtWidgets.QWidget):
         self._queue.clear()
         self._running = None
         self._y_blocked = False
+        self._cal_detail = ""
         self._timeout.stop()
         self._stop_flash()
         self._update_buttons()
@@ -219,12 +220,18 @@ class PrecheckScreen(QtWidgets.QWidget):
             if not result.passed:
                 self._finish("CAL", False, result.detail)
                 return
-            heard = ConfirmDialog.ask(self, "Alarm test",
-                                      "Did you hear the alarm buzzer and see the red bar flashing?",
-                                      confirm_text="I heard and saw it", role="go", cancel_text="Not heard")
-            self._finish("CAL", heard, f"{self._cal_detail} · alarm {'confirmed' if heard else 'NOT confirmed'}")
+            # Defer the operator confirmation out of this callback: it opens a nested modal
+            # event loop, and this handler can run from inside SimulatedDevice.tick() /
+            # SerialDevice.poll(), which must not be re-entered by a modal dialog.
+            QtCore.QTimer.singleShot(0, self._ask_alarm_heard)
             return
         self._finish(result.test, result.passed, result.detail)
+
+    def _ask_alarm_heard(self) -> None:
+        heard = ConfirmDialog.ask(self, "Alarm test",
+                                  "Did you hear the alarm buzzer and see the red bar flashing?",
+                                  confirm_text="I heard and saw it", role="go", cancel_text="Not heard")
+        self._finish("CAL", heard, f"{self._cal_detail} · alarm {'confirmed' if heard else 'NOT confirmed'}")
 
     def _on_timeout(self) -> None:
         test = self._running

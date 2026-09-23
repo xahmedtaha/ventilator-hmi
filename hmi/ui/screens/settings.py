@@ -25,6 +25,7 @@ class SettingsScreen(QtWidgets.QWidget):
     start_requested = Signal()
     setting_changed = Signal(str, object, object)
     limit_changed = Signal(str, float, float)
+    limits_replaced = Signal(object, object)  # (old: AlarmLimits, new: AlarmLimits)
 
     def __init__(self):
         super().__init__()
@@ -85,6 +86,7 @@ class SettingsScreen(QtWidgets.QWidget):
 
         self.mode.changed.connect(self._on_mode)
         self.limits_panel.limit_changed.connect(self._on_limit_changed)
+        self.limits_panel.limits_replaced.connect(self._on_limits_replaced)
         self._refresh()
 
     def load(self, patient: PatientProfile, settings: VentSettings, limits: AlarmLimits) -> None:
@@ -119,6 +121,16 @@ class SettingsScreen(QtWidgets.QWidget):
     def _on_limit_changed(self, key: str, old: float, new: float) -> None:
         self._limits = self.limits_panel.limits()
         self.limit_changed.emit(key, old, new)
+
+    def _on_limits_replaced(self, old: AlarmLimits, new: AlarmLimits) -> None:
+        self._limits = self.limits_panel.limits()
+        self.limits_replaced.emit(old, new)
+
+    def set_limits(self, limits: AlarmLimits) -> None:
+        """Push limits in from elsewhere (the Alarms dialog opened from this screen) without
+        touching settings or the device."""
+        self._limits = limits
+        self.limits_panel.load(self._patient, self._settings, limits)
 
     def _refresh(self) -> None:
         s, p = self._settings, self._patient

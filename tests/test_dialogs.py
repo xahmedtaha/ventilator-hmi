@@ -41,6 +41,29 @@ def test_alarms_dialog_lists_active_alarms_and_log(qapp):
     assert seen == [True]
 
 
+def test_log_tab_refreshes_on_timer_only_when_entry_count_changed(qapp, monkeypatch):
+    settings, limits = VentSettings.defaults_for(PATIENT), AlarmLimits.defaults_for(PATIENT)
+    engine = AlarmEngine(settings, limits)
+    log = EventLog(None, clock=lambda: datetime(2026, 9, 22, 12, 0, 0))
+    dialog = AlarmsDialog(None, engine, log, PATIENT, settings, limits, clock=lambda: 11.0)
+    calls = []
+    real_fill = dialog._fill_log
+
+    def spy(entries):
+        calls.append(len(entries))
+        real_fill(entries)
+
+    monkeypatch.setattr(dialog, "_fill_log", spy)
+    dialog._timer.timeout.emit()
+    assert calls == []  # 0 entries, same as the initial (empty) table: no refresh needed
+    log.add("SETTING", key="vt", old=460, new=500)
+    dialog._timer.timeout.emit()
+    assert calls == [1]
+    assert dialog.log_table.rowCount() == 1
+    dialog._timer.timeout.emit()
+    assert calls == [1]  # unchanged count: no second refresh
+
+
 def test_demo_panel_injects_and_resets_faults(qapp):
     device = SimulatedDevice(seed=1, sound=False)
     panel = DemoPanel(None, device)

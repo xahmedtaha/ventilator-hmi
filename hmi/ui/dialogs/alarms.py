@@ -20,6 +20,7 @@ REFRESH_MS = 500
 
 class AlarmsDialog(HmiDialog):
     limit_changed = Signal(str, float, float)
+    limits_replaced = Signal(object, object)  # (old: AlarmLimits, new: AlarmLimits)
     reset_requested = Signal()
 
     def __init__(self, parent, engine: AlarmEngine, log: EventLog, patient: PatientProfile,
@@ -36,6 +37,7 @@ class AlarmsDialog(HmiDialog):
         self.limits_panel = AlarmLimitsPanel()
         self.limits_panel.load(patient, settings, limits)
         self.limits_panel.limit_changed.connect(self.limit_changed.emit)
+        self.limits_panel.limits_replaced.connect(self.limits_replaced.emit)
         self.tabs.addTab(self.limits_panel, "Limits")
 
         self.log_table = QtWidgets.QTableWidget(0, 3)
@@ -61,7 +63,7 @@ class AlarmsDialog(HmiDialog):
         self.body.addLayout(footer)
 
         self._timer = QtCore.QTimer(self)
-        self._timer.timeout.connect(self.refresh_active)
+        self._timer.timeout.connect(self._on_timer)
         self._timer.start(REFRESH_MS)
         self.refresh_active()
         self.refresh_log()
@@ -80,8 +82,16 @@ class AlarmsDialog(HmiDialog):
             item.setForeground(QtGui.QColor(ALARM_COLORS[state.priority]))
             self.active_list.addItem(item)
 
-    def refresh_log(self) -> None:
+    def _on_timer(self) -> None:
+        self.refresh_active()
         entries = self._log.recent()
+        if len(entries) != self.log_table.rowCount():
+            self._fill_log(entries)
+
+    def refresh_log(self) -> None:
+        self._fill_log(self._log.recent())
+
+    def _fill_log(self, entries: list[dict]) -> None:
         self.log_table.setRowCount(len(entries))
         for row, entry in enumerate(entries):
             cells = (entry["time"][11:19], entry["kind"], describe(entry))
