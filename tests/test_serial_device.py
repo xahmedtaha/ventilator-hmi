@@ -74,3 +74,58 @@ def test_settings_are_written_as_protocol_lines(qapp):
     dev.apply_settings(VentSettings(), 40)
     assert len(fake.written) == 9 and fake.written[0].startswith("$S,MODE,VC*")
     dev.close()
+
+
+def test_serial_read_failure_closes_port_and_reports_link_lost(qapp):
+    now = [0.0]
+
+    class FailingSerial(FakeSerial):
+        def read(self, n):
+            raise OSError("USB unplugged")
+
+    dev = SerialDevice("TEST", serial_factory=lambda: FailingSerial(), clock=lambda: now[0])
+    dev.open()
+    links = []
+    dev.link_changed.connect(links.append)
+    # Set incoming data so in_waiting > 0 and read() gets called
+    dev._serial.incoming = b"x"
+    dev.poll()
+    assert links == [False]
+    assert dev._serial is None
+    # Second poll should not raise and should not emit again
+    dev.poll()
+    assert links == [False]
+    dev.close()
+
+
+def test_serial_open_failure_reports_link_lost(qapp):
+    now = [0.0]
+
+    def failing_factory():
+        raise OSError("Port not found")
+
+    dev = SerialDevice("TEST", serial_factory=failing_factory, clock=lambda: now[0])
+    links = []
+    dev.link_changed.connect(links.append)
+    dev.open()
+    assert links == [False]
+    assert dev._serial is None
+    dev.close()
+
+
+def test_partial_line_buffering(qapp):
+    now = [0.0]
+    dev, fake = make(qapp, now)
+    samples = []
+    dev.sample_received.connect(samples.append)
+    # First half of a sample line
+    sample_line = encode_sample(Sample(20, 5.0, 30.0, 10.0, "I"))
+    first_half = sample_line[:len(sample_line) // 2].encode()
+    fake.incoming = first_half
+    dev.poll()
+    assert samples == []
+    # Second half
+    fake.incoming = sample_line[len(sample_line) // 2:].encode()
+    dev.poll()
+    assert samples == [Sample(20, 5.0, 30.0, 10.0, "I")]
+    dev.close()

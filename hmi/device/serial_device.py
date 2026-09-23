@@ -48,7 +48,10 @@ class SerialDevice(DeviceLink):
 
     # ----- DeviceLink ----------------------------------------------------------------------------
     def open(self) -> None:
-        self._serial = self._factory()
+        try:
+            self._serial = self._factory()
+        except OSError as exc:
+            self._port_failed(exc)
         self._opened_at = self._clock()
         self._poll_timer.start(POLL_MS)
         self._beat_timer.start(HEARTBEAT_MS)
@@ -80,9 +83,13 @@ class SerialDevice(DeviceLink):
     def poll(self) -> None:
         if self._serial is None:
             return
-        waiting = self._serial.in_waiting
-        if waiting:
-            self._buffer += self._serial.read(waiting)
+        try:
+            waiting = self._serial.in_waiting
+            if waiting:
+                self._buffer += self._serial.read(waiting)
+        except OSError as exc:
+            self._port_failed(exc)
+            return
         *lines, self._buffer = self._buffer.split(b"\n")
         for raw in lines:
             self._handle_line(raw.decode("ascii", errors="replace"))
@@ -97,7 +104,21 @@ class SerialDevice(DeviceLink):
 
     def _send(self, line: str) -> None:
         if self._serial is not None:
-            self._serial.write(line.encode("ascii"))
+            try:
+                self._serial.write(line.encode("ascii"))
+            except OSError as exc:
+                self._port_failed(exc)
+
+    def _port_failed(self, exc: OSError) -> None:
+        """Close the port on serial I/O failure and report the link as lost."""
+        if self._serial is not None:
+            try:
+                self._serial.close()
+            except OSError:
+                pass  # Ignore errors while closing
+        self._serial = None
+        if self._link_state is not False:
+            self._set_link(False)
 
     def _set_link(self, ok: bool) -> None:
         self._link_state = ok
