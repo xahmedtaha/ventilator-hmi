@@ -1,5 +1,5 @@
-from hmi.device.messages import Fault, Heartbeat, Sample
-from hmi.device.protocol import encode_fault, encode_heartbeat, encode_sample
+from hmi.device.messages import Ack, Fault, Heartbeat, Sample
+from hmi.device.protocol import encode_ack, encode_fault, encode_heartbeat, encode_sample
 from hmi.device.serial_device import SerialDevice
 from hmi.model.settings import VentSettings
 
@@ -110,6 +110,46 @@ def test_serial_open_failure_reports_link_lost(qapp):
     dev.open()
     assert links == [False]
     assert dev._serial is None
+    dev.close()
+
+
+def test_missing_pyserial_reports_link_lost(qapp, capsys):
+    now = [0.0]
+
+    def failing_factory():
+        raise ImportError("No module named 'serial'")
+
+    dev = SerialDevice("TEST", serial_factory=failing_factory, clock=lambda: now[0])
+    links = []
+    dev.link_changed.connect(links.append)
+    dev.open()
+    assert links == [False]
+    assert dev._serial is None
+    assert "pyserial is not installed" in capsys.readouterr().err
+    dev.close()
+
+
+def test_cmd_fault_cleared_on_next_successful_ack(qapp):
+    now = [0.0]
+    dev, fake = make(qapp, now)
+    faults = []
+    dev.fault_changed.connect(lambda code, active: faults.append((code, active)))
+    fake.incoming = encode_ack(Ack("S", False, "bad value")).encode()
+    dev.poll()
+    assert faults == [("CMD_S_REJECTED", True)]
+    fake.incoming = encode_ack(Ack("S", True, "")).encode()
+    dev.poll()
+    assert faults == [("CMD_S_REJECTED", True), ("CMD_S_REJECTED", False)]
+    dev.close()
+
+
+def test_oversized_buffer_without_newline_is_dropped(qapp):
+    now = [0.0]
+    dev, fake = make(qapp, now)
+    fake.incoming = b"x" * 5000  # no newline, exceeds the 4096-byte cap
+    dev.poll()
+    assert dev.bad_lines == 1
+    assert dev._buffer == b""
     dev.close()
 
 

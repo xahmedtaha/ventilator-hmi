@@ -6,6 +6,7 @@ Not yet tested against real firmware; the unit tests use a fake serial port.
 """
 from __future__ import annotations
 
+import sys
 import time
 
 from hmi.device.base import DeviceLink
@@ -35,6 +36,7 @@ class SerialDevice(DeviceLink):
         self._last_heartbeat: float | None = None
         self._link_state: bool | None = None  # None = not known yet
         self.bad_lines = 0
+        self._cmd_faults: set[str] = set()
         self._poll_timer = QtCore.QTimer(self)
         self._poll_timer.timeout.connect(self.poll)
         self._beat_timer = QtCore.QTimer(self)
@@ -50,6 +52,9 @@ class SerialDevice(DeviceLink):
     def open(self) -> None:
         try:
             self._serial = self._factory()
+        except ImportError as exc:
+            print(f"pyserial is not installed: {exc}", file=sys.stderr)
+            self._port_failed(exc)
         except OSError as exc:
             self._port_failed(exc)
         self._opened_at = self._clock()
@@ -93,6 +98,10 @@ class SerialDevice(DeviceLink):
         *lines, self._buffer = self._buffer.split(b"\n")
         for raw in lines:
             self._handle_line(raw.decode("ascii", errors="replace"))
+        if len(self._buffer) > 4096:
+            # No newline in 4 KB: a stuck/garbage stream. Drop it rather than growing forever.
+            self.bad_lines += 1
+            self._buffer = b""
 
     def heartbeat(self) -> None:
         """Send our heartbeat; report the link lost once if the MCU has been silent for > 1 s."""
@@ -109,7 +118,7 @@ class SerialDevice(DeviceLink):
             except OSError as exc:
                 self._port_failed(exc)
 
-    def _port_failed(self, exc: OSError) -> None:
+    def _port_failed(self, exc: Exception) -> None:
         """Close the port on serial I/O failure and report the link as lost."""
         if self._serial is not None:
             try:
@@ -144,5 +153,12 @@ class SerialDevice(DeviceLink):
             self._last_heartbeat = self._clock()
             if self._link_state is not True:
                 self._set_link(True)
-        elif isinstance(msg, Ack) and not msg.ok:
-            self.fault_changed.emit(f"CMD_{msg.command}_REJECTED", True)
+        elif isinstance(msg, Ack):
+            code = f"CMD_{msg.command}_REJECTED"
+            if msg.ok:
+                if code in self._cmd_faults:
+                    self._cmd_faults.discard(code)
+                    self.fault_changed.emit(code, False)
+            else:
+                self._cmd_faults.add(code)
+                self.fault_changed.emit(code, True)
