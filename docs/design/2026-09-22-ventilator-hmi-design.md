@@ -39,7 +39,7 @@
 
 | Constraint | Consequence for the design |
 |---|---|
-| Tablet talks to the Pi through **VNC** | Touches arrive as **single mouse clicks**. No pinch/swipe/multi-touch. All controls are big tap targets (≥ 60 px). No text typing required except optional patient name (on-screen keyboard). |
+| Tablet talks to the Pi through **VNC** | Touches arrive as **single mouse clicks**. No pinch/swipe/multi-touch. All controls are big tap targets (≥ 48 px; primary actions ≥ 56 px — about 9–10 mm on a 10–11" tablet). No text typing required except optional patient name (on-screen keyboard). |
 | VNC does **not carry sound** | Alarm sound is produced by a **buzzer on the MCU** (Section 6.6). |
 | Pi 4 CPU / VNC bandwidth | Screen is **1280 × 800 landscape**. Waveforms redraw at **25 fps**, antialiasing off. |
 | Development happens on a Windows laptop | The app runs the same on Windows (windowed) and on the Pi (fullscreen). |
