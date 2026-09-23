@@ -117,3 +117,32 @@ def test_editing_a_limit_updates_panel(qapp, monkeypatch):
     screen.limit_changed.connect(lambda *args: seen.append(args))
     screen.limits_panel.tiles["ppeak_high"].click()
     assert screen.limits().ppeak_high == 45 and seen == [("ppeak_high", 40, 45)]
+
+
+from hmi.core.alarms.definitions import Priority
+from hmi.core.breath_analyzer import BreathResult
+from hmi.ui.screens.monitoring import MonitoringScreen
+
+
+def test_monitoring_shows_breath_values_and_alarm_colors(qapp):
+    screen = MonitoringScreen()
+    screen.load(ADULT, VentSettings.defaults_for(ADULT), AlarmLimits.defaults_for(ADULT))
+    screen.show_breath(BreathResult(0, 20.4, 5.02, 9.6, 460, 455, 1.0, 3.3, 14.0, 6.37))
+    assert screen.readouts["pip"].value_text() == "20"
+    assert screen.readouts["vte"].value_text() == "455"
+    assert screen.readouts["ie"].value_text() == "1:3.3"
+    screen.show_alarm_colors({"pip": Priority.HIGH})
+    assert screen.readouts["pip"].alarm_priority is Priority.HIGH
+    assert screen.readouts["vte"].alarm_priority is Priority.NONE
+    screen.reset_values()
+    assert screen.readouts["pip"].value_text() == "--"
+
+
+def test_monitoring_bottom_bar_follows_mode(qapp):
+    screen = MonitoringScreen()
+    screen.load(ADULT, VentSettings.defaults_for(ADULT).with_mode(Mode.PC), AlarmLimits.defaults_for(ADULT))
+    assert screen.tiles["vt"].isHidden() and not screen.tiles["pinsp"].isHidden()
+    seen = []
+    screen.edit_setting_requested.connect(seen.append)
+    screen.tiles["rr"].click()
+    assert seen == ["rr"]
