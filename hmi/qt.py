@@ -8,3 +8,6 @@ from pyqtgraph.Qt import QT_LIB, QtCore, QtGui, QtWidgets  # noqa: F401
 
 Signal = QtCore.Signal
 Slot = QtCore.Slot
+
+# QShortcut lives in QtGui on Qt 6 and in QtWidgets on Qt 5.
+QShortcut = getattr(QtGui, "QShortcut", None) or QtWidgets.QShortcut
