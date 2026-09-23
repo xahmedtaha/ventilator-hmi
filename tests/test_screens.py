@@ -30,7 +30,7 @@ import pytest
 
 from hmi.device.simulator import SimulatedDevice
 from hmi.ui.dialogs.confirm import ConfirmDialog
-from hmi.ui.screens.precheck import FAILED, PASSED, PENDING, PrecheckScreen
+from hmi.ui.screens.precheck import FAILED, PASSED, PENDING, RUNNING, PrecheckScreen
 
 
 @pytest.fixture
@@ -78,6 +78,20 @@ def test_operator_not_hearing_alarm_fails_the_test(qapp, monkeypatch):
     assert screen.rows["CAL"].status == FAILED
 
 
+def test_precheck_timeout_fails_the_running_test(qapp, always_confirm):
+    device = SimulatedDevice(seed=2, sound=False)
+    device.set_link_lost(True)  # a dead MCU never answers
+    screen = PrecheckScreen(device)
+    screen.run_all()
+    assert screen.rows["SELF"].status == RUNNING
+    screen._timeout.timeout.emit()  # trigger the timeout deterministically, no sleep
+    assert screen.rows["SELF"].status == FAILED
+    assert screen.rows["SELF"].detail_text() == "No response from the device"
+    assert screen.rows["LEAK"].status == PENDING
+    assert screen.rows["COMP"].status == PENDING
+    assert screen.run_button.isEnabled()
+
+
 from hmi.model.alarm_limits import AlarmLimits
 from hmi.model.settings import Mode, VentSettings
 from hmi.ui.dialogs.value_adjust import ValueAdjustDialog
@@ -117,6 +131,19 @@ def test_editing_a_limit_updates_panel(qapp, monkeypatch):
     screen.limit_changed.connect(lambda *args: seen.append(args))
     screen.limits_panel.tiles["ppeak_high"].click()
     assert screen.limits().ppeak_high == 45 and seen == [("ppeak_high", 40, 45)]
+
+
+def test_restore_defaults_emits_each_changed_limit(qapp, monkeypatch):
+    monkeypatch.setattr(ValueAdjustDialog, "ask", staticmethod(lambda *a, **k: 45))
+    screen = load_settings_screen()
+    screen.limits_panel.tiles["ppeak_high"].click()
+    assert screen.limits().ppeak_high == 45
+    seen = []
+    screen.limit_changed.connect(lambda *args: seen.append(args))
+    monkeypatch.setattr(ConfirmDialog, "ask", staticmethod(lambda *a, **k: True))
+    screen.limits_panel._restore()
+    assert screen.limits().ppeak_high == 40
+    assert seen[-1] == ("ppeak_high", 45, 40)
 
 
 from hmi.core.alarms.definitions import Priority
