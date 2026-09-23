@@ -34,6 +34,8 @@ def _fmt(value) -> str:
     text = str(value)
     if _FORBIDDEN & set(text):
         raise ProtocolError(f"field contains a reserved character: {text!r}")
+    if not text.isascii():
+        raise ProtocolError(f"field is not ASCII: {text!r}")
     return text
 
 

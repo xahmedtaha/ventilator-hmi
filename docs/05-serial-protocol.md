@@ -17,6 +17,9 @@ $<TYPE>,<field1>,<field2>,...*<CS>\n
 A line whose checksum does not match is ignored (and counted as a bad line) rather than acted on
 — a corrupted "set pressure to 999" is far more dangerous than a dropped sample.
 
+**Fields are ASCII only** (no accents, no '·' or '–'): `protocol.py` raises `ProtocolError` if a
+text field contains a non-ASCII character.
+
 ### Worked example: encoding `$H,42*..`
 
 The heartbeat message with sequence number 42 has body `H,42` (everything between `$` and `*`).

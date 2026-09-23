@@ -50,6 +50,12 @@ def test_fields_cannot_contain_separators():
         encode("R", "LEAK", "PASS", "a,b")
 
 
+@pytest.mark.parametrize("text", ["café", "leak · high", "10–20 mL"])  # accent, middle dot, en dash
+def test_non_ascii_fields_rejected(text):
+    with pytest.raises(ProtocolError):
+        encode("R", "LEAK", "PASS", text)
+
+
 def test_buzzer_command():
     assert encode_buzzer(3, False) == f"$B,3,0*{checksum('B,3,0')}\n"
 
