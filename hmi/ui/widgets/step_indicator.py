@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from hmi.core.flow import Step
 from hmi.qt import QtWidgets
-from hmi.ui.theme import MUTED, PRIMARY, TEXT, make_label
+from hmi.ui.theme import ADVISORY, MUTED, PRIMARY, TEXT, make_label
 
 STEP_NAMES = {Step.PATIENT: "Patient", Step.PRECHECK: "Pre-use check",
               Step.SETTINGS: "Settings", Step.VENTILATING: "Ventilate"}
@@ -25,9 +25,12 @@ class StepIndicator(QtWidgets.QWidget):
         layout.addStretch(1)
         self.set_step(Step.PATIENT)
 
-    def set_step(self, current: Step) -> None:
+    def set_step(self, current: Step, skipped: frozenset[Step] = frozenset()) -> None:
         for step, label in self._labels.items():
-            if step < current:
+            if step in skipped:
+                label.setText(f"✖ {STEP_NAMES[step]} skipped")
+                label.setStyleSheet(f"color: {ADVISORY}; font-size: 17px; font-weight: 700;")
+            elif step < current:
                 label.setText(f"✔ {STEP_NAMES[step]}")
                 label.setStyleSheet(f"color: {TEXT}; font-size: 17px;")
             elif step == current:

@@ -47,6 +47,12 @@ def test_step_indicator_marks_done_steps(qapp):
     assert si.text_of(Step.SETTINGS) == "3. Settings"
 
 
+def test_step_indicator_marks_skipped_step(qapp):
+    si = StepIndicator()
+    si.set_step(Step.SETTINGS, skipped=frozenset({Step.PRECHECK}))
+    assert si.text_of(Step.PRECHECK) == "✖ Pre-use check skipped"
+
+
 def test_numeric_readout_alarm_state(qapp):
     r = NumericReadout("PIP", "cmH2O")
     r.set_value("45")

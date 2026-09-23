@@ -4,7 +4,9 @@ import pytest
 from hmi.core.alarms.event_log import EventLog
 from hmi.core.flow import Step
 from hmi.device.simulator import SimulatedDevice
+from hmi.model.settings import Mode, param_spec
 from hmi.ui.dialogs.confirm import ConfirmDialog
+from hmi.ui.dialogs.modes import ModesDialog
 from hmi.ui.main_window import MainWindow
 from main import parse_args
 
@@ -61,6 +63,55 @@ def test_disconnection_reaches_the_banner(window):
     run(win, device, 15)
     assert "LOW PRESSURE" in win.top_bar.banner.message_text()
     assert win.top_bar.banner.is_flashing()
+
+
+def test_quick_start_shows_precheck_skipped_in_step_indicator(window):
+    win, device = window
+    win.patient_screen.quick_start_requested.emit()
+    assert win.flow.precheck_skipped
+    assert win.steps.text_of(Step.PRECHECK) == "✖ Pre-use check skipped"
+
+
+def test_change_mode_while_ventilating_updates_settings_and_device(window, monkeypatch):
+    win, device = window
+    win.patient_screen.quick_start_requested.emit()
+    win.settings_screen.start_requested.emit()
+    run(win, device, 10)
+    assert win.last_breath is not None
+    peep = win.settings.peep
+    expected_pinsp = param_spec(win.patient.category, "pinsp").clamp(win.last_breath.pip - peep)
+    monkeypatch.setattr(ModesDialog, "ask", staticmethod(lambda *a, **k: Mode.PC))
+    win._change_mode()
+    assert win.settings.mode is Mode.PC
+    assert win.settings.pinsp == expected_pinsp
+    assert not win.monitoring_screen.tiles["pinsp"].isHidden()
+    assert device.lung.settings.mode is Mode.PC
+    assert device.lung.settings.pinsp == expected_pinsp
+
+
+def test_alarm_limit_change_from_dialog_updates_everything(window):
+    win, device = window
+    win.patient_screen.quick_start_requested.emit()
+    win.settings_screen.start_requested.emit()
+    before = len(win.log.recent())
+    win._on_dialog_limit_changed("ppeak_high", 40, 45)
+    assert win.limits.ppeak_high == 45
+    assert win.engine.limits.ppeak_high == 45
+    assert win.settings_screen.limits().ppeak_high == 45
+    assert device.lung.pmax == 45
+    entries = win.log.recent()
+    assert len(entries) == before + 1
+    assert entries[0]["kind"] == "ALARM_LIMIT" and entries[0]["key"] == "ppeak_high"
+
+
+def test_open_demo_panel_creates_once_and_reuses(window):
+    win, device = window
+    win.open_demo_panel()
+    panel = win._demo_panel
+    assert panel is not None
+    win.open_demo_panel()
+    assert win._demo_panel is panel
+    panel.hide()
 
 
 def test_parse_args_defaults():

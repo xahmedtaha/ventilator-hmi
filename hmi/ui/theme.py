@@ -52,6 +52,10 @@ QComboBox {{ min-height: 44px; font-size: 18px; padding: 4px 12px; background: {
             border: 1px solid {BORDER}; border-radius: 8px; }}
 QScrollBar:vertical {{ width: 22px; background: {SURFACE}; }}
 QScrollBar::handle:vertical {{ background: {BORDER}; border-radius: 8px; min-height: 40px; }}
+QPushButton#paramTile {{ min-height: 112px; }}
+QPushButton#paramTileCompact {{ min-height: 84px; }}
+QPushButton#paramTile[hasNote="true"], QPushButton#paramTileCompact[hasNote="true"] {{
+    border: 2px solid {ADVISORY}; }}
 """
 
 

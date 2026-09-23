@@ -166,7 +166,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_step(self) -> None:
         step = self.flow.step
         self.stack.setCurrentIndex(int(step) - 1)
-        self.steps.set_step(step)
+        skipped = frozenset({Step.PRECHECK}) if self.flow.precheck_skipped else frozenset()
+        self.steps.set_step(step, skipped=skipped)
         self.steps.setVisible(step is not Step.VENTILATING)
         self.top_bar.set_mode(self.settings.mode.value if step is Step.VENTILATING else "STANDBY")
         self.top_bar.set_patient(self.patient.summary())

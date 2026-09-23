@@ -6,7 +6,7 @@ machine misbehave so the matching alarms can be demonstrated (see docs/07-demo-g
 from __future__ import annotations
 
 from hmi.device.simulator import SimulatedDevice
-from hmi.qt import QtCore, QtWidgets
+from hmi.qt import QtCore, QtGui, QtWidgets
 from hmi.ui.dialogs.base import HmiDialog
 from hmi.ui.theme import make_button, make_label
 
@@ -63,8 +63,15 @@ class DemoPanel(HmiDialog):
 
         self._timer = QtCore.QTimer(self)
         self._timer.timeout.connect(self._update_buzzer)
-        self._timer.start(500)
         self.sync()
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        self._timer.start(500)
+        super().showEvent(event)
+
+    def hideEvent(self, event: QtGui.QHideEvent) -> None:
+        self._timer.stop()
+        super().hideEvent(event)
 
     def sync(self) -> None:
         """Show the device's current fault state in the check boxes."""

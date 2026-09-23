@@ -31,12 +31,14 @@ class CheckRow(QtWidgets.QFrame):
     def __init__(self, number: int, title: str, criterion: str):
         super().__init__()
         self.setObjectName("card")
-        grid = QtWidgets.QGridLayout(self)
+        self._grid = grid = QtWidgets.QGridLayout(self)
         grid.setContentsMargins(16, 10, 16, 10)
         grid.setHorizontalSpacing(16)
         grid.addWidget(make_label(str(number), 26, bold=True, muted=True), 0, 0, 2, 1)
-        grid.addWidget(make_label(title, 20, bold=True), 0, 1)
-        grid.addWidget(make_label(criterion, 14, muted=True), 1, 1)
+        self._title_label = make_label(title, 20, bold=True)
+        self._criterion_label = make_label(criterion, 14, muted=True)
+        grid.addWidget(self._title_label, 0, 1)
+        grid.addWidget(self._criterion_label, 1, 1)
         self._status = make_label("", 18, bold=True)
         self._status.setFixedWidth(130)
         self._detail = make_label("", 15)
@@ -61,6 +63,15 @@ class CheckRow(QtWidgets.QFrame):
 
     def detail_text(self) -> str:
         return self._detail.text()
+
+    def label_column_natural_width(self) -> int:
+        """Widest of the title/criterion text at their own font, before any shared column width is set."""
+        return max(self._title_label.sizeHint().width(), self._criterion_label.sizeHint().width())
+
+    def set_label_column_width(self, width: int) -> None:
+        """Give every row the same minimum width for column 1, so the status/detail/Retry columns
+        that follow line up across rows regardless of each row's own title/criterion length."""
+        self._grid.setColumnMinimumWidth(1, width)
 
 
 class PrecheckScreen(QtWidgets.QWidget):
@@ -93,6 +104,9 @@ class PrecheckScreen(QtWidgets.QWidget):
             row.retry_button.clicked.connect(lambda _checked=False, k=key: self.retry(k))
             self.rows[key] = row
             root.addWidget(row)
+        column_width = max(row.label_column_natural_width() for row in self.rows.values())
+        for row in self.rows.values():
+            row.set_label_column_width(column_width)
         root.addStretch(1)
 
         footer = QtWidgets.QHBoxLayout()
