@@ -76,3 +76,44 @@ def test_operator_not_hearing_alarm_fails_the_test(qapp, monkeypatch):
     screen.run_all()
     tick(device, 16)
     assert screen.rows["CAL"].status == FAILED
+
+
+from hmi.model.alarm_limits import AlarmLimits
+from hmi.model.settings import Mode, VentSettings
+from hmi.ui.dialogs.value_adjust import ValueAdjustDialog
+from hmi.ui.screens.settings import SettingsScreen
+
+ADULT = PatientProfile(height_cm=170)
+
+
+def load_settings_screen():
+    screen = SettingsScreen()
+    screen.load(ADULT, VentSettings.defaults_for(ADULT), AlarmLimits.defaults_for(ADULT))
+    return screen
+
+
+def test_mode_switch_swaps_vt_for_pinsp(qapp):
+    screen = load_settings_screen()
+    seen = []
+    screen.setting_changed.connect(lambda *args: seen.append(args))
+    assert not screen.tiles["vt"].isHidden() and screen.tiles["pinsp"].isHidden()
+    screen.mode.button("PC").click()
+    assert screen.tiles["vt"].isHidden() and not screen.tiles["pinsp"].isHidden()
+    assert screen.settings().mode is Mode.PC and seen == [("mode", "VC", "PC")]
+
+
+def test_editing_vt_shows_advisory(qapp, monkeypatch):
+    monkeypatch.setattr(ValueAdjustDialog, "ask", staticmethod(lambda *a, **k: 700))
+    screen = load_settings_screen()
+    screen.tiles["vt"].click()
+    assert screen.settings().vt == 700
+    assert "mL/kg" in screen.tiles["vt"].note_text()
+
+
+def test_editing_a_limit_updates_panel(qapp, monkeypatch):
+    monkeypatch.setattr(ValueAdjustDialog, "ask", staticmethod(lambda *a, **k: 45))
+    screen = load_settings_screen()
+    seen = []
+    screen.limit_changed.connect(lambda *args: seen.append(args))
+    screen.limits_panel.tiles["ppeak_high"].click()
+    assert screen.limits().ppeak_high == 45 and seen == [("ppeak_high", 40, 45)]
